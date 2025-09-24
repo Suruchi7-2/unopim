@@ -16,20 +16,20 @@ jobs:
     name: Playwright End-to-end UI Test
     runs-on: ubuntu-latest
 
+    # ✅ Services section must be indented under the job
     services:
-  mysql:
-    image: mysql:8.0.34          # pinned version avoids rate-limit / caching issues
-    env:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: unopim
-    ports:
-      - 3306:3306
-    options: >-
-      --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
-      --health-interval=10s
-      --health-timeout=5s
-      --health-retries=5
-
+      mysql:
+        image: mysql:8.0.34          # pinned version avoids rate-limit / caching issues
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: unopim
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
 
     steps:
       # 1️⃣ Checkout code
@@ -142,4 +142,3 @@ jobs:
         with:
           name: playwright-report
           path: tests/e2e-pw/playwright-report
-#done
