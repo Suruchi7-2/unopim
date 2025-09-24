@@ -6,8 +6,7 @@ on:
       - selective-tests
   pull_request:
     branches:
-      - main              # or whichever branch you target
-
+      - main  # or whichever branch you target
 
 permissions:
   contents: read
@@ -24,9 +23,9 @@ jobs:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: unopim
         ports:
-          - 3306
+          - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping"
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
@@ -53,13 +52,26 @@ jobs:
       - name: Setting Environment
         run: |
           cp .env.example .env
-          sed -i "s|^\(APP_ENV=\s*\).*$|\1testing|" .env
-          sed -i "s|^\(DB_HOST=\s*\).*$|\1127.0.0.1|" .env
-          sed -i "s|^\(DB_PORT=\s*\).*$|\13306|" .env
-          sed -i "s|^\(DB_DATABASE=\s*\).*$|\1unopim|" .env
-          sed -i "s|^\(DB_USERNAME=\s*\).*$|\1root|" .env
-          sed -i "s|^\(DB_PASSWORD=\s*\).*$|\1root|" .env
+          sed -i "s|^APP_ENV=.*|APP_ENV=testing|" .env
+          sed -i "s|^DB_HOST=.*|DB_HOST=127.0.0.1|" .env
+          sed -i "s|^DB_PORT=.*|DB_PORT=3306|" .env
+          sed -i "s|^DB_DATABASE=.*|DB_DATABASE=unopim|" .env
+          sed -i "s|^DB_USERNAME=.*|DB_USERNAME=root|" .env
+          sed -i "s|^DB_PASSWORD=.*|DB_PASSWORD=root|" .env
           cat .env
+
+      # 4.1️⃣ Wait for MySQL
+      - name: Wait for MySQL to be ready
+        run: |
+          echo "Waiting for MySQL..."
+          for i in {1..30}; do
+            if mysqladmin ping -h127.0.0.1 -uroot -proot --silent; then
+              echo "MySQL is up!"
+              break
+            fi
+            echo "Waiting 1s..."
+            sleep 1
+          done
 
       # 5️⃣ Run UnoPim installer
       - name: Running UnoPim Installer
