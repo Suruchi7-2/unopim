@@ -4,7 +4,7 @@ namespace Webkul\Product;
 
 use Illuminate\Support\Facades\Storage;
 //this file chnaged only
-//file changed
+
 class ProductVideo
 {
     /**
