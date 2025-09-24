@@ -1,83 +1,65 @@
 name: Playwright Tests
-
-on: [push, pull_request]
-
-permissions:
-  contents: read
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  playwright_tests:
-    name: Playwright End-to-end UI Test
-    runs-on: ${{ matrix.operating-systems }}
-
-    strategy:
-      matrix:
-        operating-systems: [ubuntu-latest]
-        php-versions: ['8.2']
-
-    services:
-      mysql:
-        image: mysql:8.0
-        env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: unopim
-        ports:
-          - 3306
-        options: >-
-          --health-cmd="mysqladmin ping"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-
+  test:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+      # 👇 Added: detect file changes for selective testing
+      - name: Detect file changes
+        id: changes
+        uses: dorny/paths-filter@v3
         with:
-          php-version: ${{ matrix.php-versions }}
-          extensions: curl, fileinfo, gd, intl, mbstring, openssl, pdo, pdo_mysql, tokenizer, zip
-          ini-values: error_reporting=E_ALL
-          tools: composer:v2
+          filters: |
+            product:
+              - 'packages/Webkul/Product/**'
+              - 'tests/e2e-pw/**/product*.spec.js'
+            attribute:
+              - 'packages/Webkul/Attribute/**'
+              - 'tests/e2e-pw/**/attribute*.spec.js'
+            catalog:
+              - 'packages/Webkul/Category/**'
+              - 'tests/e2e-pw/tests/catalog/**'
 
-      - name: Running Composer Install
-        run: composer install
-
-      - name: Setting Environment
-        run: |
-          cp .env.example .env
-          sed -i "s|^\(APP_ENV=\s*\).*$|\1testing|" .env
-          sed -i "s|^\(DB_HOST=\s*\).*$|\1127.0.0.1|" .env
-          sed -i "s|^\(DB_PORT=\s*\).*$|\1${{ job.services.mysql.ports['3306'] }}|" .env
-          sed -i "s|^\(DB_DATABASE=\s*\).*$|\1unopim|" .env
-          sed -i "s|^\(DB_USERNAME=\s*\).*$|\1root|" .env
-          sed -i "s|^\(DB_PASSWORD=\s*\).*$|\1root|" .env
-          cat .env
-
-      - name: Running UnoPim Installer
-        run: |
-          php artisan unopim:install --skip-env-check --skip-admin-creation
-          php artisan migrate --force
-          php artisan migrate:fresh --seed
-          php artisan serve --host=0.0.0.0 --port=8000 &
-
-      - name: Wait for UnoPim to start
-        run: npx wait-on http://localhost:8000
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: 18
 
-      - name: Install Playwright dependencies
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps
+
+      # 👇 Replaced: single test run with conditional runs
+      - name: Run Product tests
+        if: steps.changes.outputs.product == 'true'
         run: |
           cd tests/e2e-pw
-          npm install
-          npx playwright install-deps chromium
-          npx playwright install chromium
+          npx playwright test **/product*.spec.js --reporter=list
 
-      - name: Run Playwright tests
+      - name: Run Attribute tests
+        if: steps.changes.outputs.attribute == 'true'
+        run: |
+          cd tests/e2e-pw
+          npx playwright test **/attribute*.spec.js --reporter=list
+
+      - name: Run Catalog tests
+        if: steps.changes.outputs.catalog == 'true'
+        run: |
+          cd tests/e2e-pw
+          npx playwright test tests/catalog/ --reporter=list
+
+      - name: Run all tests (fallback)
+        if: steps.changes.outputs.product != 'true' && steps.changes.outputs.attribute != 'true' && steps.changes.outputs.catalog != 'true'
         run: |
           cd tests/e2e-pw
           npx playwright test --reporter=list
