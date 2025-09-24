@@ -3,7 +3,7 @@ name: Playwright Tests
 on:
   push:
     branches:
-      - selective-branch   # your feature branch
+      - selective-tests
   pull_request:
     branches:
       - main              # or whichever branch you target
