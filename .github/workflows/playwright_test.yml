@@ -1,18 +1,90 @@
 name: Playwright Tests
+
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
-  test:
+  playwright_tests:
+    name: Playwright End-to-end UI Test
     runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: unopim
+        ports:
+          - 3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
     steps:
+      # 1️⃣ Checkout code
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 👇 Added: detect file changes for selective testing
+      # 2️⃣ Setup PHP
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.2
+          extensions: curl, fileinfo, gd, intl, mbstring, openssl, pdo, pdo_mysql, tokenizer, zip
+          ini-values: error_reporting=E_ALL
+          tools: composer:v2
+
+      # 3️⃣ Composer install
+      - name: Running Composer Install
+        run: composer install
+
+      # 4️⃣ Setup environment
+      - name: Setting Environment
+        run: |
+          cp .env.example .env
+          sed -i "s|^\(APP_ENV=\s*\).*$|\1testing|" .env
+          sed -i "s|^\(DB_HOST=\s*\).*$|\1127.0.0.1|" .env
+          sed -i "s|^\(DB_PORT=\s*\).*$|\13306|" .env
+          sed -i "s|^\(DB_DATABASE=\s*\).*$|\1unopim|" .env
+          sed -i "s|^\(DB_USERNAME=\s*\).*$|\1root|" .env
+          sed -i "s|^\(DB_PASSWORD=\s*\).*$|\1root|" .env
+          cat .env
+
+      # 5️⃣ Run UnoPim installer
+      - name: Running UnoPim Installer
+        run: |
+          php artisan unopim:install --skip-env-check --skip-admin-creation
+          php artisan migrate --force
+          php artisan migrate:fresh --seed
+          php artisan serve --host=0.0.0.0 --port=8000 &
+
+      # 6️⃣ Wait for UnoPim to start
+      - name: Wait for UnoPim to start
+        run: npx wait-on http://localhost:8000
+
+      # 7️⃣ Setup Node.js
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      # 8️⃣ Install Playwright dependencies
+      - name: Install Playwright dependencies
+        run: |
+          cd tests/e2e-pw
+          npm install
+          npx playwright install-deps chromium
+          npx playwright install chromium
+
+      # 9️⃣ Detect file changes for selective testing
       - name: Detect file changes
         id: changes
         uses: dorny/paths-filter@v3
@@ -20,7 +92,7 @@ jobs:
           filters: |
             product:
               - 'packages/Webkul/Product/**'
-              - 'tests/e2e-pw/**/product*.spec.js'
+              - 'tests/e2e-pw/tests/catalog/products.spec.js'
             attribute:
               - 'packages/Webkul/Attribute/**'
               - 'tests/e2e-pw/**/attribute*.spec.js'
@@ -28,23 +100,12 @@ jobs:
               - 'packages/Webkul/Category/**'
               - 'tests/e2e-pw/tests/catalog/**'
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Install Playwright Browsers
-        run: npx playwright install --with-deps
-
-      # 👇 Replaced: single test run with conditional runs
+      # 🔹 Conditional test runs
       - name: Run Product tests
         if: steps.changes.outputs.product == 'true'
         run: |
           cd tests/e2e-pw
-          npx playwright test **/product*.spec.js --reporter=list
+          npx playwright test tests/catalog/products.spec.js --reporter=list
 
       - name: Run Attribute tests
         if: steps.changes.outputs.attribute == 'true'
@@ -52,18 +113,13 @@ jobs:
           cd tests/e2e-pw
           npx playwright test **/attribute*.spec.js --reporter=list
 
-      - name: Run Catalog tests
-        if: steps.changes.outputs.catalog == 'true'
-        run: |
-          cd tests/e2e-pw
-          npx playwright test tests/catalog/ --reporter=list
-
       - name: Run all tests (fallback)
         if: steps.changes.outputs.product != 'true' && steps.changes.outputs.attribute != 'true' && steps.changes.outputs.catalog != 'true'
         run: |
           cd tests/e2e-pw
           npx playwright test --reporter=list
 
+      # 🔹 Upload Playwright report
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
