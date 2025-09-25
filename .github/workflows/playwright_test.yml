@@ -19,7 +19,7 @@ jobs:
     # ✅ Services section must be indented under the job
     services:
       mysql:
-        image: mysql:8.0.34          # pinned version avoids rate-limit / caching issues
+        image: mysql:8.0         # pinned version avoids rate-limit / caching issues
         env:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: unopim
